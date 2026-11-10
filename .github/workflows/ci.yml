@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+      - run: pipx install poetry
+      - run: poetry install
+      - run: poetry run ruff check .
+      - run: poetry run ruff format --check .
+      - run: poetry run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.x"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pipx install poetry
+      - run: poetry install
+      - run: poetry run python -m scripts.fetch_models
+      - run: poetry run python -m pytest -q
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+      - run: python -m scripts.fetch_models
+      - run: pipx install poetry
+      - run: poetry build --format wheel
+      - uses: pypa/gh-action-pypi-publish@release/v1
